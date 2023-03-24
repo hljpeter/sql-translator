@@ -3,33 +3,37 @@ import dynamic from "next/dynamic";
 const SyntaxHighlighter = dynamic(() => import("react-syntax-highlighter"));
 import { vs, dracula } from "react-syntax-highlighter/dist/cjs/styles/hljs";
 import Head from "next/head";
-import Github from "../components/GitHub";
-import { faExchangeAlt } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Analytics } from "@vercel/analytics/react";
-import Footer from "../components/Footer";
 import ThemeButton from "../components/ThemeButton";
-import {
-  faCopy,
-  faTrashAlt,
-  faPencil,
-} from "@fortawesome/free-solid-svg-icons";
 import { useTranslate } from "../hooks/useTranslate";
 import { toast } from "react-hot-toast";
 import LoadingDots from "../components/LoadingDots";
 import { useTheme } from "next-themes";
 import Toggle from "../components/Toggle";
-
+import { Header } from "../components/Header/Header";
 interface IHistory {
   inputText: string;
+  outputText: string;
   tableSchema?: string;
   isHumanToSql?: boolean;
 }
 
+interface IHistoryEntry {
+  inputText: string;
+  outputText: string;
+  tableSchema?: string;
+  isHumanToSql?: boolean;
+}
+
+interface ITextCopied {
+  isCopied: boolean;
+  isHistory: boolean;
+  text: string;
+}
+
 export default function Home() {
-  const { theme, systemTheme } = useTheme();
-  const isSystemTheme = theme === "system" ? systemTheme : theme
-  const isThemeDark = isSystemTheme === "dark";
+  const { resolvedTheme } = useTheme();
+  const isThemeDark = resolvedTheme === "dark";
   const [mounted, setMounted] = useState(false);
   const {
     translate,
@@ -41,11 +45,35 @@ export default function Home() {
   const [inputText, setInputText] = useState("");
   const [isHumanToSql, setIsHumanToSql] = useState(true);
   const [isOutputTextUpperCase, setIsOutputTextUpperCase] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [tableSchema, setTableSchema] = useState("");
   const [showTableSchema, setShowTableSchema] = useState(false);
   const [history, setHistory] = useState<IHistory[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [hasTranslated, setHasTranslated] = useState(false);
+  const [copied, setCopied] = useState<ITextCopied>();
+
+  useEffect(() => {
+    if (inputText && hasTranslated) {
+      setHistory((prevHistory) => [
+        ...prevHistory,
+        {
+          inputText: JSON.stringify(inputText),
+          outputText: JSON.stringify(outputText),
+          tableSchema,
+          isHumanToSql,
+        },
+      ]);
+
+      addHistoryEntry({
+        inputText: JSON.stringify(inputText),
+        tableSchema,
+        isHumanToSql,
+        outputText: JSON.stringify(outputText),
+      });
+
+      setHasTranslated(false);
+    }
+  }, [outputText]);
 
   useEffect(() => {
     setMounted(true);
@@ -71,6 +99,15 @@ export default function Home() {
     setHistory([...history, entry]);
   };
 
+  function safeJSONParse(str: string) {
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      console.error("JSON parse error:", e);
+      return null;
+    }
+  }
+
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(event.target.value);
     if (!showTableSchema) {
@@ -78,26 +115,25 @@ export default function Home() {
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(outputText);
-    setIsCopied(true);
-    setTimeout(() => {
-      setIsCopied(false);
+  const handleCopy = (text: string, isHistory: boolean) => {
+    navigator.clipboard.writeText(text);
+    setCopied({
+      isCopied: true,
+      isHistory: isHistory,
+      text: text
+    })
+     setTimeout(() => {
+      setCopied({
+        isCopied: false,
+        isHistory: isHistory,
+        text: text
+      })
     }, 3000);
   };
 
-  const handleEdit = (entry: IHistory) => {
-    const { inputText, tableSchema, isHumanToSql } = entry;
-    setInputText(JSON.parse(inputText));
-    tableSchema ? setTableSchema(tableSchema) : setTableSchema("");
-    isHumanToSql ? setIsHumanToSql(isHumanToSql) : setIsHumanToSql(false);
-    setOutputText("");
-  };
-
-  const handleClear = () => {
-    setInputText("");
-    setOutputText("");
-    setTableSchema("");
+  const buttonStyles = {
+    light: "light-button-w-gradient-border text-black",
+    dark: "dark-button-w-gradient-border text-[#D8D8D8]",
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -119,13 +155,8 @@ export default function Home() {
         return;
       }
 
-      addHistoryEntry({
-        inputText: JSON.stringify(inputText),
-        tableSchema,
-        isHumanToSql,
-      });
-
       translate({ inputText, tableSchema, isHumanToSql });
+      setHasTranslated(true);
     } catch (error) {
       console.log(error);
       toast.error(`Error translating ${isHumanToSql ? "to SQL" : "to human"}.`);
@@ -134,178 +165,180 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen">
+      <Header />
       <Head>
-        <title>
+        <title className="flex justify-between items-center w-full mt-5 pb-7 sm:px-4 px-2">
           {isHumanToSql ? "Human to SQL Translator" : "SQL to Human Translator"}
         </title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <main className="max-w-lg mx-auto my-12 px-4">
-        <ThemeButton className="absolute top-2.5 right-2.5 text-gray-500 dark:text-gray-400 focus:outline-none hover:scale-125 transition" />
-        <div className="flex items-center justify-center">
-          <a
-            className="flex max-w-fit items-center justify-center space-x-2 rounded-full border border-blue-600 text-white px-5 py-2 text-sm shadow-md hover:bg-blue-500 bg-blue-600 font-medium transition"
-            href="https://github.com/hljpeter/sql-translator"
-            target="_blank"
-            rel="noopener noreferrer"
+      <ThemeButton className="absolute top-2.5 right-2.5 text-gray-500 dark:text-gray-400 focus:outline-none hover:scale-125 transition" />
+
+      <div className="flex flex-col md:flex-row w-full gap-6 bg-[#EEEEEE] dark:text-white dark:bg-black dark:border dark:border-white/20 rounded-2xl p-2">
+        <div className="w-full">
+          <form
+            onSubmit={(event) => handleSubmit(event)}
+            className="rounded-xl bg-white dark:bg-custom-gray container-w-gradient-border dark:dark-container-w-gradient-border p-3 h-full w-full"
           >
-            <Github />
-            <p>Star on GitHub</p>
-          </a>
-        </div>
-
-        <h1 className="text-3xl font-bold text-center mt-4 mb-8">
-          {isHumanToSql ? "Human to SQL Translator" : "SQL to Human Translator"}
-        </h1>
-
-        <form
-          onSubmit={(event) => handleSubmit(event)}
-          className="bg-white dark:bg-gray-800 border dark:border-gray-700 shadow-md rounded px-8 pt-6 pb-8 mb-4"
-        >
-          <div className="flex flex-col mb-4">
-            <label htmlFor="inputText" className="block font-bold mb-2">
-              {isHumanToSql ? "Human Language Query" : "SQL Query"}
-            </label>
-            <textarea
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-100 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              id="inputText"
-              rows={3}
-              placeholder={
-                isHumanToSql
-                  ? "e.g. show me all the cars that are red"
-                  : "SELECT * FROM cars WHERE color = 'red'"
-              }
-              value={inputText}
-              onChange={handleInputChange}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                  handleSubmit(event);
-                }
-              }}
-              required
-            />
-          </div>
-          {tableSchema && showTableSchema && (
-            <div className="mt-4">
-              <h2 className="font-bold text-lg mb-2">Table Schema</h2>
-              <SyntaxHighlighter
-                language="sql"
-                style={isThemeDark ? dracula : vs}
-                wrapLines={true}
-                showLineNumbers={true}
-                lineNumberStyle={{ color: isThemeDark ? "gray" : "#ccc" }}
-                customStyle={{
-                  maxHeight: "none",
-                  height: "auto",
-                  overflow: "visible",
-                  wordWrap: "break-word",
-                  color: "inherit",
-                  backgroundColor: isThemeDark ? "#374151" : "#fff",
-                  borderColor: "#6b7280",
-                  borderRadius: 4,
-                  borderWidth: 1,
-                }}
-                lineProps={{ style: { whiteSpace: "pre-wrap" } }}
+            <div className="flex flex-col h-full">
+              <label
+                htmlFor="inputText"
+                className="block font-medium mb-2 text-gray-700 dark:text-gray-200"
               >
-                {tableSchema}
-              </SyntaxHighlighter>
-            </div>
-          )}
-
-          {isHumanToSql && (
-            <div className="flex items-center mb-4">
-              <input
-                id="showTableSchema"
-                type="checkbox"
-                checked={showTableSchema}
-                onChange={() => {
-                  setShowTableSchema(!showTableSchema);
-                  if (!showTableSchema) {
-                    setTableSchema("");
-                  }
-                }}
-                className="mr-2"
-              />
-              <label htmlFor="showTableSchema">Add Schema</label>
-            </div>
-          )}
-
-          {isHumanToSql && showTableSchema && (
-            <div className="flex flex-col mb-4">
-              <label htmlFor="tableSchema" className="block font-bold mb-2">
-                Table Schema (optional)
+                {isHumanToSql ? "Human Language" : "SQL"}
               </label>
               <textarea
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-100 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                id="tableSchema"
+                className={`appearance-none border-0 rounded-lg w-full py-2 px-3 bg-custom-gray-bg dark:bg-custom-dark-gray text-gray-700 dark:text-white leading-tight focus:outline-none focus:shadow-outline ${
+                  isThemeDark ? "placeholder-dark" : ""
+                }`}
+                id="inputText"
                 rows={3}
-                placeholder="e.g. CREATE TABLE cars (id INT, make TEXT, model TEXT, year INT, color TEXT)"
-                value={tableSchema}
-                autoFocus
-                onChange={(event) => setTableSchema(event.target.value)}
-                onBlur={() => {
-                  if (!showTableSchema) {
-                    setTableSchema("");
+                placeholder={
+                  isHumanToSql
+                    ? "e.g. show me all the cars that are red"
+                    : "SELECT * FROM cars WHERE color = 'red'"
+                }
+                value={inputText}
+                onChange={handleInputChange}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    (event.metaKey || event.ctrlKey)
+                  ) {
+                    handleSubmit(event);
                   }
                 }}
+                required
               />
-            </div>
-          )}
+              {tableSchema && showTableSchema && (
+                <div className="mt-4">
+                  <h2 className="mb-2 font-medium text-sm text-gray-500 dark:text-white">
+                    Table Schema
+                  </h2>
+                  <SyntaxHighlighter
+                    language="sql"
+                    style={isThemeDark ? dracula : vs}
+                    wrapLines={true}
+                    showLineNumbers={true}
+                    lineNumberStyle={{ color: isThemeDark ? "gray" : "#ccc" }}
+                    customStyle={{
+                      maxHeight: "none",
+                      height: "auto",
+                      overflow: "visible",
+                      wordWrap: "break-word",
+                      color: "inherit",
+                      backgroundColor: isThemeDark ? "#1D1D1D" : "#F8F8F8",
+                      borderRadius: "0.5rem",
+                    }}
+                    lineProps={{ style: { whiteSpace: "pre-wrap" } }}
+                  >
+                    {tableSchema}
+                  </SyntaxHighlighter>
+                </div>
+              )}
 
-          <div className="flex justify-between">
-            <div className="flex items-center">
-              <FontAwesomeIcon
-                onClick={handleClear}
-                icon={faTrashAlt}
-                className="text-gray-700 dark:text-gray-200 font-bold ml-2 cursor-pointer text-xs icon-size-30 switch-icon w-4 h-4 hover:scale-110 transition"
-              />
+              <div className="flex items-center justify-between my-3 last:mb-0 space-x-10">
+                {isHumanToSql && (
+                  <button
+                    className={`rounded-full flex items-center justify-center space-x-4 border text-sm font-medium px-4 py-2 [text-shadow:0_0_1px_rgba(0,0,0,0.25)] ${
+                      resolvedTheme === "light"
+                        ? buttonStyles.light
+                        : buttonStyles.dark
+                    }`}
+                    onClick={() => {
+                      setShowTableSchema(!showTableSchema);
+                      if (!showTableSchema) {
+                        setTableSchema("");
+                      }
+                    }}
+                  >
+                    {showTableSchema ? "Remove Schema" : "Add Schema"}
+                  </button>
+                )}
 
-              <FontAwesomeIcon
-                icon={faExchangeAlt}
-                className={`text-gray-700 dark:text-gray-200 font-bold ml-2 cursor-pointer hover:scale-110 transition-transform duration-300 ${
-                  isHumanToSql ? "transform rotate-90" : ""
-                } icon-size-30 switch-icon w-4 h-4`}
-                onClick={() => {
-                  setIsHumanToSql(!isHumanToSql);
-                  setOutputText("");
-                }}
-              />
+                <button
+                  type="submit"
+                  className={`cursor-pointer py-2 px-4 rounded-full blue-button-w-gradient-border [text-shadow:0_0_1px_rgba(0,0,0,0.25)] shadow-2xl flex flex-row items-center justify-start ${
+                    translating && "opacity-50 pointer-events-none"
+                  }`}
+                  disabled={translating}
+                >
+                  <img src="/stars.svg"></img>&nbsp;
+                  <div className="relative text-sm font-semibold font-inter text-white text-center inline-block mx-auto">
+                    {translating ? (
+                      <>
+                        Translating
+                        <LoadingDots color="white" />
+                      </>
+                    ) : (
+                      `Generate ${isHumanToSql ? "SQL" : "Natural Language"}`
+                    )}
+                  </div>
+                </button>
+              </div>
+
+              {isHumanToSql && showTableSchema && (
+                <div className="flex flex-col mt-2">
+                  <label
+                    htmlFor="tableSchema"
+                    className="block mb-2 text-sm font-medium text-gray-500 dark:text-white"
+                  >
+                    Table Schema Input
+                    <span className="ml-2 text-blue-600 bg-blue-50 dark:bg-gray-200 text-xs px-[4px] py-1 rounded-md">
+                      Optional
+                    </span>
+                  </label>
+                  <textarea
+                    className={`appearance-none border-0 rounded-lg w-full py-2 px-3 bg-custom-gray-bg dark:bg-custom-dark-gray text-gray-700 dark:text-white leading-tight focus:outline-none focus:shadow-outline ${
+                      isThemeDark ? "placeholder-dark" : ""
+                    }`}
+                    id="tableSchema"
+                    rows={3}
+                    placeholder="e.g. CREATE TABLE cars (id INT, make TEXT, model TEXT, year INT, color TEXT)"
+                    value={tableSchema}
+                    autoFocus
+                    onChange={(event) => setTableSchema(event.target.value)}
+                    onBlur={() => {
+                      if (!showTableSchema) {
+                        setTableSchema("");
+                      }
+                    }}
+                  />
+                </div>
+              )}
             </div>
+          </form>
+        </div>
+        <div>
+          <div className="flex items-center md:h-full">
+            <button
+              className={`text-gray-700 dark:text-gray-200 cursor-pointer mx-auto`}
+              onClick={() => {
+                setIsHumanToSql(!isHumanToSql);
+                setOutputText("");
+              }}
+            >
+              <img
+                src={
+                  resolvedTheme === "light" ? "/switch.svg" : "/switchDark.svg"
+                }
+                alt="Switch"
+                className="w-12 h-12 md:w-24 md:h-24"
+              />
+            </button>
           </div>
-
-          <button
-            type="submit"
-            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${
-              translating && "opacity-50 pointer-events-none"
-            }`}
-            disabled={translating}
-          >
-            {translating ? (
-              <>
-                Translating
-                <LoadingDots color="white" />
-              </>
-            ) : (
-              `Translate to ${isHumanToSql ? "SQL" : "Natural Language"}`
-            )}
-          </button>
-        </form>
-
-        {outputText && (
-          <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 shadow-md rounded px-8 pt-6 pb-8 mb-4">
-            <label htmlFor="outputText" className="block font-bold mb-2">
-              {isHumanToSql ? "SQL Query" : "Human Language Query"}
-            </label>
-            {isHumanToSql && (
-              <Toggle
-                isUppercase={isOutputTextUpperCase}
-                handleSwitchText={setIsOutputTextUpperCase}
-              />
-            )}
-
-            {isHumanToSql ? (
+        </div>
+        <div className="w-full">
+          <div className="flex flex-col rounded-xl bg-white container-w-gradient-border dark:dark-container-w-gradient-border dark:bg-custom-gray p-3 h-full w-full custom-width sm:w-auto">
+            <div className="flex flex-col flex-1">
+              <label
+                htmlFor="outputText"
+                className="block mb-2 font-medium  text-gray-700 dark:text-gray-200"
+              >
+                {isHumanToSql ? "SQL" : "Human Language"}
+              </label>
               <SyntaxHighlighter
-                language="sql"
+                language={isHumanToSql ? "sql" : "text"}
                 style={isThemeDark ? dracula : vs}
                 wrapLines={true}
                 showLineNumbers={true}
@@ -316,37 +349,53 @@ export default function Home() {
                   overflow: "visible",
                   wordWrap: "break-word",
                   color: "inherit",
-                  backgroundColor: isThemeDark ? "#374151" : "#fff",
-                  borderColor: "#6b7280",
-                  borderRadius: 4,
-                  borderWidth: 1,
+                  backgroundColor: isThemeDark ? "#1D1D1D" : "#F8F8F8",
+                  flex: 1,
+                  borderRadius: "0.5rem",
                 }}
                 lineProps={{ style: { whiteSpace: "pre-wrap" } }}
               >
                 {isOutputTextUpperCase
                   ? outputText.toUpperCase()
-                  : outputText.toLowerCase()}
+                  : outputText.toLowerCase() ||
+                    (isHumanToSql
+                      ? "SELECT * FROM cars WHERE color = 'red'"
+                      : "show me all the cars that are red")}
               </SyntaxHighlighter>
-            ) : (
-              <textarea
-                readOnly
-                className="h-auto shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-100 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                rows={3}
-                value={
-                  isOutputTextUpperCase
-                    ? outputText.toUpperCase()
-                    : outputText.toLowerCase()
-                }
-              />
-            )}
-            <FontAwesomeIcon
-              onClick={handleCopy}
-              icon={faCopy}
-              className="text-gray-700 dark:text-gray-200 font-bold ml-2 cursor-pointer text-xs icon-size-30 w-4 h-4 mr-2 mt-3 hover:scale-110 transition"
-            />
-            {isCopied && (
-              <p className="text-blue-500 text-sm">Copied to clipboard!</p>
-            )}
+            </div>
+
+            <div className="flex items-center mt-3 justify-between">
+              <div className="flex items-center gap-1">
+                <button
+                  className={`flex items-center disabled:pointer-events-none disabled:opacity-70 justify-center space-x-4 rounded-full px-5 py-2 text-sm font-medium transition ${
+                    resolvedTheme === "light"
+                      ? buttonStyles.light
+                      : buttonStyles.dark
+                  }`}
+                  onClick={() => handleCopy(outputText, false)}
+                  disabled={!copied?.isHistory && copied?.text === outputText || copied?.isCopied }
+                >
+                  <img
+                    src={
+                      resolvedTheme === "light" ? "/copyDark.svg" : "/copy.svg"
+                    }
+                    alt="Copy"
+                  />
+                </button>
+
+                {!copied?.isHistory && copied?.isCopied && copied.text == outputText && (
+                  <p className="text-black-500 text-xs">Copied to clipboard</p>
+                )}
+              </div>
+              {isHumanToSql && (
+                <div className="flex items-center ml-4">
+                  <Toggle
+                    isUppercase={isOutputTextUpperCase}
+                    handleSwitchText={setIsOutputTextUpperCase}
+                  />
+                </div>
+              )}
+            </div>
             <textarea
               className="hidden"
               id="outputText"
@@ -358,29 +407,43 @@ export default function Home() {
               readOnly
             />
           </div>
-        )}
+        </div>
+      </div>
 
-        {history.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 shadow-md rounded px-8 pt-6 pb-1 mb-4">
-            <>
-              <div className="flex justify-between mb-4 items-center">
-                <label htmlFor="outputText" className="block font-bold mb-2">
-                  History
-                </label>
-                <button
-                  type="button"
-                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-15 h-10"
-                  onClick={() => setShowHistory(!showHistory)}
-                >
-                  {showHistory ? "Hide" : "Show"}
-                </button>
-              </div>
+      {history.length > 0 && (
+        <button
+          className={`rounded-full flex items-center justify-center space-x-4 border text-sm font-medium mt-2 mb-2 px-4 py-2 [text-shadow:0_0_1px_rgba(0,0,0,0.25)] ${
+            resolvedTheme === "light" ? buttonStyles.light : buttonStyles.dark
+          }`}
+          onClick={() => setShowHistory(!showHistory)}
+        >
+          {showHistory ? "Hide History" : "Show History"}
+        </button>
+      )}
 
-              {showHistory && (
-                <>
-                  {history.length > 0 &&
-                    history.map((entry: IHistory, index: number) => (
-                      <div key={index} className="flex justify-between mb-4">
+      {showHistory && (
+        <>
+          {history.length > 0 &&
+            history.map((entry: IHistoryEntry, index: number) => (
+              <div key={index} className="w-full mb-6">
+                <div className="flex flex-col md:flex-row w-full gap-6 bg-custom-background bg-gray-100 dark:bg-black dark:border-gray-800 border rounded-3xl from-blue-500 p-3">
+                  <div className="w-full">
+                    <div className="rounded-xl bg-white border dark:border-gray-800 dark:bg-custom-gray shadow-md p-6 w-full h-full">
+                      <label
+                        htmlFor="inputText"
+                        className="block mb-2 text-gray-300"
+                      >
+                        {entry.isHumanToSql ? "Human Language" : "SQL"}
+                      </label>
+                      {entry.isHumanToSql ? (
+                        <div
+                          className={`${
+                            isThemeDark ? "text-white" : "text-black"
+                          } whitespace-pre-wrap`}
+                        >
+                          {safeJSONParse(entry?.inputText)}
+                        </div>
+                      ) : (
                         <SyntaxHighlighter
                           language="sql"
                           style={isThemeDark ? dracula : vs}
@@ -390,36 +453,95 @@ export default function Home() {
                             color: isThemeDark ? "gray" : "#ccc",
                           }}
                           customStyle={{
+                            minHeight: "70px",
                             maxHeight: "none",
                             height: "auto",
                             overflow: "visible",
                             wordWrap: "break-word",
                             color: "inherit",
-                            backgroundColor: isThemeDark ? "#374151" : "#fff",
-                            borderColor: "#6b7280",
-                            borderRadius: 4,
-                            borderWidth: 1,
+                            backgroundColor: isThemeDark
+                              ? "#1D1D1D"
+                              : "#F8F8F8",
                           }}
                           lineProps={{ style: { whiteSpace: "pre-wrap" } }}
-                          startingLineNumber={index + 1}
                         >
-                          {JSON.parse(entry?.inputText)}
+                          {safeJSONParse(entry?.inputText)}
                         </SyntaxHighlighter>
-                        <FontAwesomeIcon
-                          onClick={() => handleEdit(entry)}
-                          icon={faPencil}
-                          className="text-gray-700 hover:text-blue-700 dark:text-gray-200 ml-2 text-xs icon-size-1 w-4 h-4 mt-2"
-                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="w-full">
+                    <div className="rounded-xl bg-white border dark:border-gray-800 dark:bg-custom-gray shadow-md p-6 w-full h-full">
+                      <label
+                        htmlFor="outputText"
+                        className="block mb-2 text-gray-300"
+                      >
+                        {entry.isHumanToSql ? "SQL" : "Human Language"}
+                      </label>
+                      {entry.isHumanToSql ? (
+                        <SyntaxHighlighter
+                          language="sql"
+                          style={isThemeDark ? dracula : vs}
+                          wrapLines={true}
+                          showLineNumbers={true}
+                          lineNumberStyle={{
+                            color: isThemeDark ? "gray" : "#ccc",
+                          }}
+                          customStyle={{
+                            minHeight: "70px",
+                            maxHeight: "none",
+                            height: "auto",
+                            overflow: "visible",
+                            wordWrap: "break-word",
+                            color: "inherit",
+                            backgroundColor: isThemeDark
+                              ? "#1D1D1D"
+                              : "#F8F8F8",
+                          }}
+                          lineProps={{ style: { whiteSpace: "pre-wrap" } }}
+                        >
+                          {safeJSONParse(entry?.outputText)}
+                        </SyntaxHighlighter>
+                      ) : (
+                        <div
+                          className={`${
+                            isThemeDark ? "text-white" : "text-black"
+                          } whitespace-pre-wrap`}
+                        >
+                          {safeJSONParse(entry?.outputText)}
+                        </div>
+                      )}
+                      <div className="flex items-center mt-3 gap-1">
+                        <button
+                          className={`flex items-center disabled:pointer-events-none disabled:opacity-70 justify-center space-x-4 rounded-full px-5 py-2 text-sm font-medium transition ${
+                            resolvedTheme === "light"
+                            ? buttonStyles.light
+                            : buttonStyles.dark
+                            }`}
+                          onClick={() => handleCopy(safeJSONParse(entry?.outputText), true)}
+                          disabled={copied?.isHistory && JSON.stringify(copied?.text) === entry?.outputText || copied?.isCopied }
+                        >
+                          <img
+                            src={
+                            resolvedTheme === "light" ? "/copyDark.svg" : "/copy.svg"
+                            }
+                            alt="Copy"
+                          />
+                        </button>
+                        {copied?.isHistory && copied?.isCopied && copied.text == safeJSONParse(entry?.outputText) && (
+                          <p className="text-black-500 text-xs">Copied to clipboard</p>
+                        )}
+                        </div>
                       </div>
-                    ))}
-                </>
-              )}
-            </>
-          </div>
-        )}
-      </main>
+                    </div>
+                </div>
+              </div>
+            ))}
+        </>
+      )}
+
       <Analytics />
-      <Footer />
     </div>
   );
 }

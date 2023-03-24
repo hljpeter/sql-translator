@@ -8,7 +8,7 @@ With the SQL and Natural Language Translator, you don't need to be a SQL expert 
 
 ### Figma link: https://www.figma.com/file/JTE0Arq9VCZ41H3YpxNYR5/SQLTranslate?node-id=0-1
 
-<img src="https://github.com/whoiskatrin/sql-translator/blob/main/latestUI.png" width="600" />
+<img src="https://github.com/whoiskatrin/sql-translator/blob/main/UI.png" width="600" />
 
 ## Features
 
@@ -32,6 +32,8 @@ You can press the 'reverse' button to give input as Natural Language and get SQL
 
 ## Installation
 
+### Local Development Environment
+
 1. Clone the repository:
 
     ```bash
@@ -44,18 +46,44 @@ You can press the 'reverse' button to give input as Natural Language and get SQL
     cd sql-translator
     npm install
     ```
-3. Input your OPENAI API key in the .env file, you can get your API key [here](https://beta.openai.com/account/api-keys):
 
+3. Build the application:
+
+    ```bash
+    npm run build
+    ```
+
+4. Input your OPENAI API key in the .env file, you can get your API key [here](https://beta.openai.com/account/api-keys):
 
     ```bash
     OPENAI_API_KEY=$YOUR_API_KEY
     ```
 
-4. Start the server:
+5. Start the server:
 
     ```bash
     npm run build
     npm start
+    ```
+
+### Docker Compose
+
+1. Clone the repository:
+
+    ```bash
+    git clone https://github.com/whoiskatrin/sql-translator.git
+    ```
+
+2. Input your OPENAI API key in the .env.production file, you can get your API key [here](https://beta.openai.com/account/api-keys):
+
+    ```bash
+    OPENAI_API_KEY=$YOUR_API_KEY
+    ```
+
+3. Start the development server:
+
+    ```bash
+    docker-compose up
     ```
 
 ## Usage
