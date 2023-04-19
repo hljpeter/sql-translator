@@ -30,8 +30,13 @@ interface ITextCopied {
   isHistory: boolean;
   text: string;
 }
+interface prev{
+  previnput: string;
+  prevoutput: string;
+}
 
 export default function Home() {
+  
   const { resolvedTheme } = useTheme();
   const isThemeDark = resolvedTheme === "dark";
   const [mounted, setMounted] = useState(false);
@@ -43,6 +48,7 @@ export default function Home() {
     translationError,
   } = useTranslate();
   const [inputText, setInputText] = useState("");
+  const [prevquery, setPrevquery] = useState<prev[]>([]);
   const [isHumanToSql, setIsHumanToSql] = useState(true);
   const [isOutputTextUpperCase, setIsOutputTextUpperCase] = useState(false);
   const [tableSchema, setTableSchema] = useState("");
@@ -88,15 +94,28 @@ export default function Home() {
   }
 
   const isValidTableSchema = (text: string) => {
-    console.log(text);
     const pattern = /^CREATE\s+TABLE\s+\w+\s*\((\s*.+\s*,?\s*)+\);?$/i;
     const regex = new RegExp(pattern);
-    return regex.test(text);
+      return regex.test(text.trim());
   };
 
   const addHistoryEntry = (entry: IHistory) => {
-    if (history.some(({ inputText }) => inputText === entry.inputText)) return;
-    setHistory([...history, entry]);
+    if (
+      !history.some(
+        ({ inputText, outputText }) =>
+          inputText === entry.inputText && outputText === entry.outputText
+      ) &&
+      !prevquery.some(
+        ({ previnput, prevoutput }) =>
+          previnput === entry.inputText && prevoutput === entry.outputText
+      )
+    ) {
+      setHistory([...history, entry]);
+      
+    }
+    const newhistory: prev = {previnput : entry.inputText, prevoutput : entry.outputText};
+    setPrevquery([...prevquery,newhistory]);
+    
   };
 
   function safeJSONParse(str: string) {
@@ -240,6 +259,7 @@ export default function Home() {
               <div className="flex items-center justify-between my-3 last:mb-0 space-x-10">
                 {isHumanToSql && (
                   <button
+                    type='button'
                     className={`rounded-full flex items-center justify-center space-x-4 border text-sm font-medium px-4 py-2 [text-shadow:0_0_1px_rgba(0,0,0,0.25)] ${
                       resolvedTheme === "light"
                         ? buttonStyles.light
